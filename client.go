@@ -6,6 +6,7 @@ type Client struct {
 	events chan Event
 }
 
+// newClient creates a Client with an event buffer of the given size.
 func newClient(bufSize int) *Client {
 	return &Client{events: make(chan Event, bufSize)}
 }

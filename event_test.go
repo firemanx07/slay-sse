@@ -6,6 +6,8 @@ import (
 	"time"
 )
 
+// TestEventEncode verifies the SSE wire-format output for id/name/data/retry
+// combinations, including line-ending normalization and field sanitization.
 func TestEventEncode(t *testing.T) {
 	tests := []struct {
 		name string

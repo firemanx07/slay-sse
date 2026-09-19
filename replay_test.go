@@ -2,6 +2,8 @@ package sse
 
 import "testing"
 
+// TestMemoryReplayStoreSinceEmptyLastID verifies an empty lastEventID
+// returns every recorded event for the topic.
 func TestMemoryReplayStoreSinceEmptyLastID(t *testing.T) {
 	s := NewMemoryReplayStore(10)
 	s.Add("topic", Event{ID: "1", Data: "a"})
@@ -13,6 +15,8 @@ func TestMemoryReplayStoreSinceEmptyLastID(t *testing.T) {
 	}
 }
 
+// TestMemoryReplayStoreSinceLastID verifies Since returns only the events
+// recorded after the given lastEventID.
 func TestMemoryReplayStoreSinceLastID(t *testing.T) {
 	s := NewMemoryReplayStore(10)
 	s.Add("topic", Event{ID: "1", Data: "a"})
@@ -25,6 +29,8 @@ func TestMemoryReplayStoreSinceLastID(t *testing.T) {
 	}
 }
 
+// TestMemoryReplayStoreEvictsBeyondCapacity verifies the oldest events are
+// evicted once a topic's recorded events exceed its capacity.
 func TestMemoryReplayStoreEvictsBeyondCapacity(t *testing.T) {
 	s := NewMemoryReplayStore(2)
 	s.Add("topic", Event{ID: "1"})
@@ -37,6 +43,9 @@ func TestMemoryReplayStoreEvictsBeyondCapacity(t *testing.T) {
 	}
 }
 
+// TestMemoryReplayStoreUnknownLastIDReturnsAll verifies an unknown or
+// evicted lastEventID returns every retained event, per the ReplayStore
+// interface's documented contract.
 func TestMemoryReplayStoreUnknownLastIDReturnsAll(t *testing.T) {
 	s := NewMemoryReplayStore(10)
 	s.Add("topic", Event{ID: "1"})
@@ -48,6 +57,8 @@ func TestMemoryReplayStoreUnknownLastIDReturnsAll(t *testing.T) {
 	}
 }
 
+// TestNewMemoryReplayStoreClampsNegativeCapacity verifies a negative
+// capacity is treated as zero rather than panicking on the first Add.
 func TestNewMemoryReplayStoreClampsNegativeCapacity(t *testing.T) {
 	s := NewMemoryReplayStore(-1)
 	s.Add("topic", Event{ID: "1"})
@@ -59,6 +70,8 @@ func TestNewMemoryReplayStoreClampsNegativeCapacity(t *testing.T) {
 	}
 }
 
+// TestMemoryReplayStoreUnknownTopicReturnsEmpty verifies Since returns no
+// events for a topic that was never recorded.
 func TestMemoryReplayStoreUnknownTopicReturnsEmpty(t *testing.T) {
 	s := NewMemoryReplayStore(10)
 	got := s.Since("missing", "")

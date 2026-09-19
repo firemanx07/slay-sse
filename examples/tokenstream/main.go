@@ -16,6 +16,7 @@ import (
 
 const topic = "chat"
 
+// main starts the demo HTTP server and the token-publishing goroutine.
 func main() {
 	broker := sse.NewBroker(sse.WithReplayStore(sse.NewMemoryReplayStore(50)))
 	handler := sse.NewHandler(broker, func(*http.Request) string { return topic })
@@ -32,6 +33,8 @@ func main() {
 	}
 }
 
+// publishTokens repeatedly publishes a fixed sentence to topic, one word at
+// a time, to simulate an LLM's token stream.
 func publishTokens(broker *sse.Broker) {
 	tokens := strings.Fields("The quick brown fox jumps over the lazy dog")
 	var id int

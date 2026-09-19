@@ -6,6 +6,8 @@ import (
 	"time"
 )
 
+// TestBrokerPublishDeliversToSubscriber verifies a published event reaches
+// a client subscribed to the same topic.
 func TestBrokerPublishDeliversToSubscriber(t *testing.T) {
 	b := NewBroker()
 	c := b.Subscribe("topic")
@@ -23,6 +25,8 @@ func TestBrokerPublishDeliversToSubscriber(t *testing.T) {
 	}
 }
 
+// TestBrokerPublishDoesNotCrossTopics verifies a client subscribed to one
+// topic receives nothing published to another.
 func TestBrokerPublishDoesNotCrossTopics(t *testing.T) {
 	b := NewBroker()
 	c := b.Subscribe("other")
@@ -37,6 +41,8 @@ func TestBrokerPublishDoesNotCrossTopics(t *testing.T) {
 	}
 }
 
+// TestBrokerUnsubscribeStopsDelivery verifies an unsubscribed client
+// receives no further events published to its former topic.
 func TestBrokerUnsubscribeStopsDelivery(t *testing.T) {
 	b := NewBroker()
 	c := b.Subscribe("topic")
@@ -51,6 +57,8 @@ func TestBrokerUnsubscribeStopsDelivery(t *testing.T) {
 	}
 }
 
+// TestBrokerDropsWhenClientBufferFull verifies Publish drops events for a
+// client whose buffer is full, invoking DropFunc, instead of blocking.
 func TestBrokerDropsWhenClientBufferFull(t *testing.T) {
 	var mu sync.Mutex
 	var dropped int
@@ -74,6 +82,8 @@ func TestBrokerDropsWhenClientBufferFull(t *testing.T) {
 	}
 }
 
+// TestBrokerConcurrentPublishSubscribe exercises concurrent Subscribe,
+// Publish, and Unsubscribe calls under the race detector.
 func TestBrokerConcurrentPublishSubscribe(t *testing.T) {
 	b := NewBroker(WithClientBuffer(64))
 	var wg sync.WaitGroup
@@ -97,6 +107,8 @@ func TestBrokerConcurrentPublishSubscribe(t *testing.T) {
 	wg.Wait()
 }
 
+// TestBrokerSubscribeAndReplayNoStoreReturnsNil verifies SubscribeAndReplay
+// returns a nil replay slice when the Broker has no ReplayStore configured.
 func TestBrokerSubscribeAndReplayNoStoreReturnsNil(t *testing.T) {
 	b := NewBroker()
 	c, replay := b.SubscribeAndReplay("topic", "")
@@ -115,14 +127,21 @@ type blockingReplayStore struct {
 	proceed  chan struct{}
 }
 
+// Add implements ReplayStore by forwarding to inner.
 func (s *blockingReplayStore) Add(topic string, e Event) { s.inner.Add(topic, e) }
 
+// Since implements ReplayStore, pausing until proceed is closed before
+// forwarding to inner.
 func (s *blockingReplayStore) Since(topic, lastEventID string) []Event {
 	close(s.sinceHit)
 	<-s.proceed
 	return s.inner.Since(topic, lastEventID)
 }
 
+// TestBrokerSubscribeAndReplayIsAtomicWithPublish verifies a Publish
+// concurrent with SubscribeAndReplay blocks until the snapshot is taken,
+// and that the published event is delivered exactly once: live, not
+// replayed, since it lands after the snapshot.
 func TestBrokerSubscribeAndReplayIsAtomicWithPublish(t *testing.T) {
 	store := &blockingReplayStore{
 		inner:    NewMemoryReplayStore(10),
