@@ -37,13 +37,25 @@ func TestMemoryReplayStoreEvictsBeyondCapacity(t *testing.T) {
 	}
 }
 
-func TestMemoryReplayStoreUnknownLastIDReturnsNoneAfter(t *testing.T) {
+func TestMemoryReplayStoreUnknownLastIDReturnsAll(t *testing.T) {
 	s := NewMemoryReplayStore(10)
 	s.Add("topic", Event{ID: "1"})
+	s.Add("topic", Event{ID: "2"})
 
 	got := s.Since("topic", "does-not-exist")
+	if len(got) != 2 {
+		t.Fatalf("got %d events, want 2 (unknown/evicted id returns everything retained)", len(got))
+	}
+}
+
+func TestNewMemoryReplayStoreClampsNegativeCapacity(t *testing.T) {
+	s := NewMemoryReplayStore(-1)
+	s.Add("topic", Event{ID: "1"})
+	s.Add("topic", Event{ID: "2"})
+
+	got := s.Since("topic", "")
 	if len(got) != 0 {
-		t.Fatalf("got %d events, want 0", len(got))
+		t.Fatalf("got %d events, want 0 (negative capacity clamped to zero)", len(got))
 	}
 }
 

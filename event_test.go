@@ -33,6 +33,16 @@ func TestEventEncode(t *testing.T) {
 			want: "data: line1\ndata: line2\n\n",
 		},
 		{
+			name: "lone cr data is normalized",
+			e:    Event{Data: "line1\rline2"},
+			want: "data: line1\ndata: line2\n\n",
+		},
+		{
+			name: "mixed line endings are normalized",
+			e:    Event{Data: "a\r\nb\rc\nd"},
+			want: "data: a\ndata: b\ndata: c\ndata: d\n\n",
+		},
+		{
 			name: "retry",
 			e:    Event{Data: "x", Retry: 2500 * time.Millisecond},
 			want: "retry: 2500\ndata: x\n\n",

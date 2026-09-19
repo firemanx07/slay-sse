@@ -24,9 +24,15 @@ type Broker struct {
 // Option configures a Broker.
 type Option func(*Broker)
 
-// WithClientBuffer sets the per-client event buffer size. The default is 16.
+// WithClientBuffer sets the per-client event buffer size. The default is
+// 16. A negative n is ignored.
 func WithClientBuffer(n int) Option {
-	return func(b *Broker) { b.clientBuffer = n }
+	return func(b *Broker) {
+		if n < 0 {
+			return
+		}
+		b.clientBuffer = n
+	}
 }
 
 // WithReplayStore attaches a ReplayStore used to serve clients that
@@ -59,11 +65,32 @@ func (b *Broker) Subscribe(topic string) *Client {
 	c := newClient(b.clientBuffer)
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	b.addClientLocked(topic, c)
+	return c
+}
+
+// SubscribeAndReplay atomically subscribes a client to topic and returns
+// the events recorded after lastEventID. Doing both under one lock with
+// Publish guarantees an event lands in exactly one of the two: replayed
+// here, or delivered live to the same client, never both.
+func (b *Broker) SubscribeAndReplay(topic, lastEventID string) (*Client, []Event) {
+	c := newClient(b.clientBuffer)
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.addClientLocked(topic, c)
+	var replay []Event
+	if b.replay != nil {
+		replay = b.replay.Since(topic, lastEventID)
+	}
+	return c, replay
+}
+
+// addClientLocked registers c on topic. Callers must hold b.mu for writing.
+func (b *Broker) addClientLocked(topic string, c *Client) {
 	if b.topics[topic] == nil {
 		b.topics[topic] = make(map[*Client]struct{})
 	}
 	b.topics[topic][c] = struct{}{}
-	return c
 }
 
 // Unsubscribe removes a client from topic. It is safe to call more than
@@ -83,25 +110,18 @@ func (b *Broker) Unsubscribe(topic string, c *Client) {
 
 // Publish fans e out to every client currently subscribed to topic. A
 // client whose buffer is full has e dropped for it rather than blocking
-// Publish for the other subscribers; see WithDropFunc.
+// Publish for the other subscribers; see WithDropFunc. Recording e to the
+// configured ReplayStore happens under the same lock as the fan-out, so it
+// can't interleave with a concurrent SubscribeAndReplay.
 func (b *Broker) Publish(topic string, e Event) {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
 	if b.replay != nil {
 		b.replay.Add(topic, e)
 	}
-	b.mu.RLock()
-	defer b.mu.RUnlock()
 	for c := range b.topics[topic] {
 		if !c.send(e) && b.onDrop != nil {
 			b.onDrop(topic, e)
 		}
 	}
-}
-
-// Replay returns the events recorded for topic after lastEventID, oldest
-// first. It returns nil if no ReplayStore is configured.
-func (b *Broker) Replay(topic, lastEventID string) []Event {
-	if b.replay == nil {
-		return nil
-	}
-	return b.replay.Since(topic, lastEventID)
 }

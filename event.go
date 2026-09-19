@@ -36,6 +36,7 @@ func (e Event) encode(w io.Writer) error {
 		fmt.Fprintf(&b, "retry: %d\n", e.Retry.Milliseconds())
 	}
 	data := strings.ReplaceAll(e.Data, "\r\n", "\n")
+	data = strings.ReplaceAll(data, "\r", "\n")
 	for _, line := range strings.Split(data, "\n") {
 		fmt.Fprintf(&b, "data: %s\n", line)
 	}

@@ -52,7 +52,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	topic := h.topicFunc(r)
-	client := h.broker.Subscribe(topic)
+	client, replay := h.broker.SubscribeAndReplay(topic, r.Header.Get("Last-Event-ID"))
 	defer h.broker.Unsubscribe(topic, client)
 
 	header := w.Header()
@@ -63,7 +63,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	flusher.Flush()
 
-	for _, e := range h.broker.Replay(topic, r.Header.Get("Last-Event-ID")) {
+	for _, e := range replay {
 		if err := e.encode(w); err != nil {
 			return
 		}

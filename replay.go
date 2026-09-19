@@ -22,8 +22,11 @@ type MemoryReplayStore struct {
 }
 
 // NewMemoryReplayStore creates a MemoryReplayStore retaining up to
-// capacity events per topic.
+// capacity events per topic. A negative capacity is treated as zero.
 func NewMemoryReplayStore(capacity int) *MemoryReplayStore {
+	if capacity < 0 {
+		capacity = 0
+	}
 	return &MemoryReplayStore{
 		capacity: capacity,
 		topics:   make(map[string][]Event),
@@ -47,7 +50,6 @@ func (s *MemoryReplayStore) Since(topic, lastEventID string) []Event {
 	buf := s.topics[topic]
 	start := 0
 	if lastEventID != "" {
-		start = len(buf)
 		for i, e := range buf {
 			if e.ID == lastEventID {
 				start = i + 1

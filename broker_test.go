@@ -97,9 +97,93 @@ func TestBrokerConcurrentPublishSubscribe(t *testing.T) {
 	wg.Wait()
 }
 
-func TestBrokerReplayNoStoreReturnsNil(t *testing.T) {
+func TestBrokerSubscribeAndReplayNoStoreReturnsNil(t *testing.T) {
 	b := NewBroker()
-	if got := b.Replay("topic", ""); got != nil {
-		t.Fatalf("got %+v, want nil", got)
+	c, replay := b.SubscribeAndReplay("topic", "")
+	defer b.Unsubscribe("topic", c)
+	if replay != nil {
+		t.Fatalf("got %+v, want nil", replay)
+	}
+}
+
+// blockingReplayStore wraps a ReplayStore whose Since call pauses until
+// proceed is closed, after signaling sinceHit — used to pin down the
+// window during which SubscribeAndReplay must exclude Publish.
+type blockingReplayStore struct {
+	inner    ReplayStore
+	sinceHit chan struct{}
+	proceed  chan struct{}
+}
+
+func (s *blockingReplayStore) Add(topic string, e Event) { s.inner.Add(topic, e) }
+
+func (s *blockingReplayStore) Since(topic, lastEventID string) []Event {
+	close(s.sinceHit)
+	<-s.proceed
+	return s.inner.Since(topic, lastEventID)
+}
+
+func TestBrokerSubscribeAndReplayIsAtomicWithPublish(t *testing.T) {
+	store := &blockingReplayStore{
+		inner:    NewMemoryReplayStore(10),
+		sinceHit: make(chan struct{}),
+		proceed:  make(chan struct{}),
+	}
+	b := NewBroker(WithReplayStore(store))
+
+	var (
+		client *Client
+		replay []Event
+	)
+	subscribeDone := make(chan struct{})
+	go func() {
+		client, replay = b.SubscribeAndReplay("topic", "")
+		close(subscribeDone)
+	}()
+
+	select {
+	case <-store.sinceHit:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for Since to be called")
+	}
+
+	publishDone := make(chan struct{})
+	go func() {
+		b.Publish("topic", Event{ID: "1", Data: "hello"})
+		close(publishDone)
+	}()
+
+	select {
+	case <-publishDone:
+		t.Fatal("Publish returned before SubscribeAndReplay released the lock")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	close(store.proceed)
+
+	select {
+	case <-subscribeDone:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for SubscribeAndReplay")
+	}
+	<-publishDone
+
+	if len(replay) != 0 {
+		t.Fatalf("got %d replayed events, want 0 (event was published after the snapshot)", len(replay))
+	}
+
+	select {
+	case e := <-client.Events():
+		if e.ID != "1" {
+			t.Fatalf("got event ID %q, want %q", e.ID, "1")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for live delivery")
+	}
+
+	select {
+	case e := <-client.Events():
+		t.Fatalf("unexpected second delivery: %+v", e)
+	case <-time.After(50 * time.Millisecond):
 	}
 }
